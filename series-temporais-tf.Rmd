@@ -15,6 +15,7 @@ install.packages("fpp2", repos = "https://cran.rstudio.com")
 install.packages("xlsx", repos = "https://cran.rstudio.com")
 install.packages("fpp", readxl = "https://cran.rstudio.com")
 install.packages("pander", repos = "https://cran.rstudio.com")
+install.packages("dgof",, repos = "https://cran.rstudio.com")
 
 library(Quandl) 
 library(fpp)
@@ -23,6 +24,9 @@ library(xlsx)
 library(readxl)
 library(gridExtra)
 library(pander)
+library(dgof)
+library(tseries)
+library(urca)
 
 # Carregando os dados
 
@@ -40,20 +44,46 @@ fertcons <- read_excel("Datasets/Demanda.xlsx")
 ```{r cars}
 # Informações iniciais sobre o Dataset
 
-ggplot(fertcons, aes(x=fertilizantes)) + 
-  geom_histogram()+
-  geom_vline(aes(xintercept=mean(fertilizantes)),color="blue", linetype="dashed", size=1)
+b1 <- fertcons %>% ggplot(aes(x=fertilizantes)) + 
+        geom_histogram(bins=30, fill="blue")+
+        xlab("Frequencia")+
+        ylab("Consumo")+
+        geom_vline(aes(xintercept=mean(fertilizantes)),color="blue", linetype="dashed", size=1)
 
+b2 <- fertcons %>% ggplot(aes(y= fertilizantes)) + 
+      geom_boxplot(width = .1, color = "blue")
+  
+grid.arrange(b1,b2,ncol = 2)
 any(is.na(fertcons))
 pander(summary(fertcons))
 
 ```
 
-Pelas informações acima conclui-se que trata-se de um Dataset contendo 268 observações sem nenhum NA.
+Pelo gráfico perece que o histograma de frequência e consumo não apresenta uma distribuição normal, pois há um viés a esquerda. O dataset não apresenta "NA" e possui 268 observações. O boxplot destaca um outlier. 
+
+Realizando os testes de normalidade verificamos que há divergências entre o teste de Shapiro e o Komolgorov, no primeiro os dados não são considerados normais ( P-Value < 0.05) e no segundo são considerados normais (P-Value > 0.05)
+
+```{r}
+# Shapiro-Wilk
+
+shapiro.test(fertcons$fertilizantes)
+
+# Kolmogorov-Smirnov
+
+ks.test(fertcons$fertilizantes, mean(fertcons$fertilizantes), sd(fertcons$fertilizantes))
+
+```
+
 
 ## Criando e analisando a série temporal
 
 Foi criada uma série temporal chamada ts.fertcons seu gráfico foi plotado e decomposto.
+
+É possível identificar no gráfico uma leve tendência de crescimento pois a série inicia em 1998 com valores em torno de 1.000 e o seu final está em torno de 3.000 indicando que a entrega de fertilizantes tem aumentado ao longo dos anos. 
+Em 2008, provavelmente por conta da crise econômica, observa-se um vale no gráfico que contraria um pouco a tendência. 
+
+É possível verificar a existência de sazonalidade, cuja amplitude vai aumentando, com exceção de 2003,2004, 2008 e 2009, parecendo indicar um padrão multiplicativo. 
+
 
 ```{r}
 
@@ -94,17 +124,12 @@ grid.arrange(d1,d2,ncol = 2)
 ```
 
 
-### Em Relação à tendência
-
-É possível identificar no gráfico uma leve tendência de crescimento pois a série inicia em 1998 com valores em torno de 1.000 e o seu final está em torno de 3.000 indicando que a entrega de fertilizantes tem aumentado ao longo dos anos. 
-Em 2008, provavelmente por conta da crise econômica, observa-se um vale no gráfico que contraria um pouco a tendência. 
-
-
 ### Sazonalidade
 
-É possível verificar a existência de sazonalidade, cuja amplitude vai aumentando, com exceção de 2008 e 2009,   parecendo indicar um padrão multiplicativo. 
+Verifica-se que os meses de agosto, setembro e outubro, são os de maior entrega de fertilizantes e os piores meses parecem ser os de março e abril iniciando um novo ciclo de crescimento em maio o que parece adequado aos períodos de safra e entresafra.  
 
- 
+Parece haver um crescimento da entrega, em valores absolutos, em todos os meses ao longo dos anos embora haja vales em alguns anos indicando possíveis crises econômicas como a de 2008.
+
 
 ```{r}
 
@@ -121,13 +146,64 @@ q3 <- ggsubseriesplot(ts.fertcons) +
   ylab("T 1000") +
   ggtitle("Seasonal subseries plot: Entrega de Fertilizantes")
 
-grid.arrange(q1,q2, q3,ncol = 2, nrow =2)
+
+grid.arrange(q1,q2, q3, nrow =3)
+
+
 
 ```
 
-Verifica-se que os meses de agosto, setembro e outubro, são os de maior entrega de fertilizantes e os piores meses parecem ser os de março e abril iniciando um novo ciclo de crescimento em maio. 
+## Autocorrelação
 
-Parece haver um crescimento da entrega em todos os meses ao longo dos anos embora haja um vales em alguns anos indicando possíveis crises econômicas ou de outra natureza. 
+No correlograma da série é possível notar a presença da sazonaliade nos picos múltiplos de 12, como as cavidades tentem a ficar dois quartos atrás dos picos os múltiplos de 6 são os mais negativos. O dacaimento muito lento do ACF pode ser sinal de não estacionariedade. Como o decaimento do PACF é menos lento que o do ACF modelos com compomentes autorregressivos tem a possibilidade de se adequar melhor. 
+
+```{r}
+a1 <- ggAcf(ts.fertcons, lag=100)
+a2 <- ggPacf(ts.fertcons, lag=100)
+grid.arrange(a1,a2,ncol = 2)
+
+```
+
+### Estacionariedade da Série
+
+Nos testes formais temos as seguintes conclusões: 
+
+* ADF:  H~0~</sub> - Série não estacionária -> Rejeitada
+
+* KPPS: H~0~</sub> - Série estácionária -> Rejeitada
+
+* PP: H~0~</sub> - Série não estacionária -> Rejeitada
+
+A análise gráfica e o teste KPPS indicam que a série não é estacionária, porém os testes ADF e PP indicam que a série é estacionaria.
+
+
+
+
+
+
+```{r}
+adf.test(ts.fertcons)
+kpss.test(ts.fertcons)
+pp.test(ts.fertcons)
+
+```
+
+Ao tentar obter convergência nos resultados dos testes através da diferenciação da série observamos que com uma diferenciação é possível manter os resultados do ADF e do PP e inverter o resultado do kpss obtendo indicação de estacionariedade nos 3 testes. 
+
+```{r}
+#Utililzando ndiff para saber o número de diferenciações necessárias
+ndiffs(ts.fertcons)
+
+# Diferenciando a série
+ts.diff_fertcons <- diff(ts.fertcons)
+
+# Testando
+
+adf.test(ts.diff_fertcons)
+kpss.test(ts.diff_fertcons)
+pp.test(ts.diff_fertcons)
+
+```
 
 
 # Modelos de Estudo
@@ -138,82 +214,110 @@ Inicialmente vamos montar a base de treino e a base de teste que servirão para 
 train <- window(ts.fertcons, start = c(2007,1), end = c(2018,12))
 test <-window(ts.fertcons, start = c(2019,1),end = c(2020,4))
 
-
-
 ```
 
-## Holt Winters 
+## Modelos por Exponential Smoothing
+
+Vamos utilizar 3 modelos e tentar comparar a capacidade de forecasting dos mesmos, a saber: 
+
+* Holt Winters Aditivo
+* Holt Winters Multiplicativo 
+* ETS
+
+No caso do ETS vamos verificar se ele indica outra possibilidade ou se a indicação bate com HWA ou HWM. 
 
 ```{r}
 
 # Aditivo
 
-fit_holt_ad <- hw(train,seasonal = "additive", h=16, level=95)
+fit_holt_ad <- hw(train,seasonal = "additive", h=14, level=95)
 
+summary(fit_holt_ad)
 
 # Multiplicativo
 
-fit_holt_multi <- hw(train,seasonal = "multiplicative", h=16, level=95)
+fit_holt_multi <- hw(train,seasonal = "multiplicative", h=14, level=95)
+summary(fit_holt_multi)
 
 
 # Plotando os modelos
 
 h1 <- autoplot(train, serie="Serie Original") + 
   autolayer(fit_holt_ad$fitted, serie = "Modelo HW Aditivo") +
-  autolayer(fit_holt_ad, serie = "Previsão",showgap = F) +
+  autolayer(fit_holt_ad, serie = "Previsão",showgap = F, PI=F) +
   autolayer(test, series= "Base de Teste")
 
 
 h2 <- autoplot(train, serie="Serie Original") + 
   autolayer(fit_holt_multi$fitted, serie = "Modelo HW Aditivo") +
-  autolayer(fit_holt_multi, serie = "Previsão",showgap = F) +
+  autolayer(fit_holt_multi, serie = "Previsão",showgap = F, PI=F) +
   autolayer(test, series= "Base de Teste")
 
 
-
-pander(accuracy(fit_holt_ad))
-pander(accuracy(fit_holt_multi))
 
 # Utilizando modelo ETS ( Error, Trend, Seasonal)
 
 ets_model <- ets(train)
-
-
-
-fit_ets <- forecast(ets_model, h=16)
+fit_ets <- forecast(ets_model, h=14)
 
 h3 <- autoplot(train, serie="Serie Original") + 
   autolayer(fit_ets$fitted, serie = "Modelo HW Aditivo") +
-  autolayer(fit_ets, serie = "Previsão",showgap = F) +
+  autolayer(fit_ets, serie = "Previsão",showgap = F, PI=F) +
   autolayer(test, series= "Base de Teste")
+
+# Resultado do Modelo ETS
+summary(ets_model)
+
+
 
 grid.arrange(h1,h2,h3, nrow=3)
 
 
+
+print("Modelo HW - Aditivo")
 pander(accuracy(fit_holt_ad))
+
+print("Modelo HW - Multiplicativo")
 pander(accuracy(fit_holt_multi))
+
+print("Modelo ETS")
 pander(accuracy(fit_ets))
 
-pander(summary(ets_model))
+
+
 
 ```
 
-O modelo ETS, curiosamente, está sugerindo não utilizar a componente de tendência e utilizar o 
+
+A comparação entre os modelos HWA e HWM parece pender para o HWA o modelo ETS, que atinge métricas melhores que os dois outros propõe uma abordagem com erro e sazonalidades aditivos e sem tendencia, cuja equação segue abaixo: 
 
 
 
+## Análise de Resíduos
 
-## Autocorrelação
-
-Abaixo estão os gráficos ACF e PACF, como a série apresenta uma tendência estamos utilizando diff para gerar a autocorellação e a autocorrelação parcial. 
-No gráfico ACF é possível notar a presença da sazonaliade nos picos múltiplos de 12, como as cavidades tentem a ficar dois quartos atrás dos picos os múltiplos de 6 são os mais negativos.
-O dacaimento lento pode ser sinal de não estacionariedade.
+Avaliando os resíduos de cada um dos modelos é possível verificar pelos p-values do  Ljung-Box test que o modelo aditivo apresenta um p-value um pouco maior que 0,05, o ETS(A,N,A) possui um p-value maior que 0,05. Ambos possuem resíduos independentes e identicamente distribuidos. No caso do HW multiplicativo o p-value é muito pequeno permitindo rejeitar a hipótese nula, isto é, os resíduos do modelo apresentam problemas de correlação entre os resíduos. 
 
 
 
 ```{r}
-a1 <- ggAcf(diff(ts.fertcons), lag=100)
-a2 <- ggPacf(diff(ts.fertcons), lag=100)
-grid.arrange(a1,a2,ncol = 2)
+checkresiduals(fit_holt_ad)
+checkresiduals(fit_holt_multi)
+checkresiduals(ets_model)
 
 ```
+
+
+## SARIMA
+
+```{r}
+
+auto.arima(ts.fertcons)
+
+fit_sarima <- arima(train, order=c(2,0,1), seasonal=c(0,1,0))
+
+
+
+
+
+```
+
