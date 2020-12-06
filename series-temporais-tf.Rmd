@@ -1,0 +1,219 @@
+---
+title: "series-temporais-tf"
+author: "Carlos Quintanilha"
+date: "05/12/2020"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# Setup Inicial
+
+install.packages("Quandl", repos = "https://cran.rstudio.com")
+install.packages("fpp", repos = "https://cran.rstudio.com")
+install.packages("fpp2", repos = "https://cran.rstudio.com")
+install.packages("xlsx", repos = "https://cran.rstudio.com")
+install.packages("fpp", readxl = "https://cran.rstudio.com")
+install.packages("pander", repos = "https://cran.rstudio.com")
+
+library(Quandl) 
+library(fpp)
+library(fpp2)
+library(xlsx)
+library(readxl)
+library(gridExtra)
+library(pander)
+
+# Carregando os dados
+
+fertcons <- read_excel("Datasets/Demanda.xlsx")
+
+```
+
+
+# Comentário Inicial - Alálise Exploratório
+
+
+## Informações sobre a Dataset
+
+
+```{r cars}
+# Informações iniciais sobre o Dataset
+
+ggplot(fertcons, aes(x=fertilizantes)) + 
+  geom_histogram()+
+  geom_vline(aes(xintercept=mean(fertilizantes)),color="blue", linetype="dashed", size=1)
+
+any(is.na(fertcons))
+pander(summary(fertcons))
+
+```
+
+Pelas informações acima conclui-se que trata-se de um Dataset contendo 268 observações sem nenhum NA.
+
+## Criando e analisando a série temporal
+
+Foi criada uma série temporal chamada ts.fertcons seu gráfico foi plotado e decomposto.
+
+```{r}
+
+# Criando a TS
+
+ts.fertcons <- ts(fertcons, frequency = 12, start = c(1998,1), end = c(2020,4))
+class(ts.fertcons)
+
+# Plot simples da série
+
+frequency(ts.fertcons)
+start(ts.fertcons)
+end(ts.fertcons)
+s1 <- autoplot(ts.fertcons, frequency = 12, start=c(1998,1)) + 
+  ylab("Consumo") +
+  scale_x_continuous(breaks = scales::extended_breaks(12))+
+  ggtitle("Entrega Mensal de Fertilizantes")
+
+s2 <- autoplot(diff(ts.fertcons), frequency = 12, start=c(1998,1)) + 
+  ylab("Consumo") +
+  scale_x_continuous(breaks = scales::extended_breaks(12))+
+  ggtitle("Entrega Mensal de Fertilizantes com Diff")
+
+grid.arrange(s1,s2,nrow = 2)
+
+d1 <- ts.fertcons%>%
+  decompose(type= "additive")%>%
+  autoplot() + xlab("Ano")+
+  ggtitle("Decomposição Aditiva")
+
+d2 <- ts.fertcons%>%
+  decompose(type= "multiplicative")%>%
+  autoplot() + xlab("Ano")+
+  ggtitle("Decomposição Multiplicativa")
+
+grid.arrange(d1,d2,ncol = 2)
+
+```
+
+
+### Em Relação à tendência
+
+É possível identificar no gráfico uma leve tendência de crescimento pois a série inicia em 1998 com valores em torno de 1.000 e o seu final está em torno de 3.000 indicando que a entrega de fertilizantes tem aumentado ao longo dos anos. 
+Em 2008, provavelmente por conta da crise econômica, observa-se um vale no gráfico que contraria um pouco a tendência. 
+
+
+### Sazonalidade
+
+É possível verificar a existência de sazonalidade, cuja amplitude vai aumentando, com exceção de 2008 e 2009,   parecendo indicar um padrão multiplicativo. 
+
+ 
+
+```{r}
+
+
+q1 <- ggseasonplot(ts.fertcons, year.labels=TRUE, year.labels.left=TRUE) +
+  ylab("$ million") +
+  ggtitle("Seasonal plot: antidiabetic drug sales")
+
+q2 <- ggseasonplot(ts.fertcons, polar = TRUE) +
+  ylab("$ million") +
+  ggtitle("Seasonal plot: antidiabetic drug sales")
+
+q3 <- ggsubseriesplot(ts.fertcons) +
+  ylab("T 1000") +
+  ggtitle("Seasonal subseries plot: Entrega de Fertilizantes")
+
+grid.arrange(q1,q2, q3,ncol = 2, nrow =2)
+
+```
+
+Verifica-se que os meses de agosto, setembro e outubro, são os de maior entrega de fertilizantes e os piores meses parecem ser os de março e abril iniciando um novo ciclo de crescimento em maio. 
+
+Parece haver um crescimento da entrega em todos os meses ao longo dos anos embora haja um vales em alguns anos indicando possíveis crises econômicas ou de outra natureza. 
+
+
+# Modelos de Estudo
+
+Inicialmente vamos montar a base de treino e a base de teste que servirão para todo o exercício. 
+
+```{r}
+train <- window(ts.fertcons, start = c(2007,1), end = c(2018,12))
+test <-window(ts.fertcons, start = c(2019,1),end = c(2020,4))
+
+
+
+```
+
+## Holt Winters 
+
+```{r}
+
+# Aditivo
+
+fit_holt_ad <- hw(train,seasonal = "additive", h=16, level=95)
+
+
+# Multiplicativo
+
+fit_holt_multi <- hw(train,seasonal = "multiplicative", h=16, level=95)
+
+
+# Plotando os modelos
+
+h1 <- autoplot(train, serie="Serie Original") + 
+  autolayer(fit_holt_ad$fitted, serie = "Modelo HW Aditivo") +
+  autolayer(fit_holt_ad, serie = "Previsão",showgap = F) +
+  autolayer(test, series= "Base de Teste")
+
+
+h2 <- autoplot(train, serie="Serie Original") + 
+  autolayer(fit_holt_multi$fitted, serie = "Modelo HW Aditivo") +
+  autolayer(fit_holt_multi, serie = "Previsão",showgap = F) +
+  autolayer(test, series= "Base de Teste")
+
+
+
+pander(accuracy(fit_holt_ad))
+pander(accuracy(fit_holt_multi))
+
+# Utilizando modelo ETS ( Error, Trend, Seasonal)
+
+ets_model <- ets(train)
+
+
+
+fit_ets <- forecast(ets_model, h=16)
+
+h3 <- autoplot(train, serie="Serie Original") + 
+  autolayer(fit_ets$fitted, serie = "Modelo HW Aditivo") +
+  autolayer(fit_ets, serie = "Previsão",showgap = F) +
+  autolayer(test, series= "Base de Teste")
+
+grid.arrange(h1,h2,h3, nrow=3)
+
+
+pander(accuracy(fit_holt_ad))
+pander(accuracy(fit_holt_multi))
+pander(accuracy(fit_ets))
+
+pander(summary(ets_model))
+
+```
+
+O modelo ETS, curiosamente, está sugerindo não utilizar a componente de tendência e utilizar o 
+
+
+
+
+## Autocorrelação
+
+Abaixo estão os gráficos ACF e PACF, como a série apresenta uma tendência estamos utilizando diff para gerar a autocorellação e a autocorrelação parcial. 
+No gráfico ACF é possível notar a presença da sazonaliade nos picos múltiplos de 12, como as cavidades tentem a ficar dois quartos atrás dos picos os múltiplos de 6 são os mais negativos.
+O dacaimento lento pode ser sinal de não estacionariedade.
+
+
+
+```{r}
+a1 <- ggAcf(diff(ts.fertcons), lag=100)
+a2 <- ggPacf(diff(ts.fertcons), lag=100)
+grid.arrange(a1,a2,ncol = 2)
+
+```
