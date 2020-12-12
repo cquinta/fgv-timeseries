@@ -1,3 +1,6 @@
+Exercício de Séries Temporais do MBA de BigData e Business Analytics da FGV
+
+
 # fgv-timeseries
 
 ## Introdução:
@@ -24,19 +27,20 @@ i.	Holt-Winters Aditivo
 ii.	Holt_Winters Multiplicativo
 iii.	Modelo SARIMA(p,d,q)(P,D,Q)[s].
 
-d.	Plotar os correlogramas ACF e PACF e verificar a estacionariedade da série temporal. 
+*	Plotar os correlogramas ACF e PACF e verificar a estacionariedade da série temporal. 
 
-e.	Efetuar os testes de raíz-unitária: Augmented Dickey_Fuller, Kwiatkowski–Phillips–Schmidt–Shin (KPSS) e Phillip-Perron.
+*	Efetuar os testes de raíz-unitária: Augmented Dickey_Fuller, Kwiatkowski–Phillips–Schmidt–Shin (KPSS) e Phillip-Perron.
 
-f.	Modelagem do SARIMA(p,d,q)(P,D,Q)[s].
+*	Modelagem do SARIMA(p,d,q)(P,D,Q)[s].
 
-g.	 Os parâmetros do modelo são estatisticamente significativos? Efetuar o t-test() do pacote BETS.
+*	 Os parâmetros do modelo são estatisticamente significativos? Efetuar o t-test() do pacote BETS.
 
-h.	Efetuar os testes de diagnósticos para o modelo SARIMA(p,d,q)(P,D,Q)[s] (Ausência de autocorrelação serial; ausência de heterocedasticidade condicional; normalidade).
-i.	Qual é o melhor modelo? Justifique.
+*	Efetuar os testes de diagnósticos para o modelo SARIMA(p,d,q)(P,D,Q)[s] (Ausência de autocorrelação serial; ausência de heterocedasticidade condicional; normalidade).
 
-j.	Com base no melhor modelo, efetuar a previsão com base no subconjunto de treinamento (train) para o período até dezembro-2021. Comparar com as demandas com a base teste.
+*	Qual é o melhor modelo? Justifique.
 
-k.	Conclusão sucinta.
+*	Com base no melhor modelo, efetuar a previsão com base no subconjunto de treinamento (train) para o período até dezembro-2021. Comparar com as demandas com a base teste.
 
-IV.	Data-limite para entrega do trabalho: 10-12-20.
+*	Conclusão sucinta.
+
+
