@@ -1,9 +1,16 @@
 ---
-title: "series-temporais-tf"
-author: "Carlos Quintanilha"
-date: "05/12/2020"
-output: word_document
+title: "Trabalho Final de Séries Temporais"
+author: 
+  - "Carlos Alberto Torres Quintanilha Neto"
+  - "Turma: MRJ02021-TBABD-8"
+e-mail: "cquinta@gmail.com"
+date: "12/12/2020"
+output:
+   word_document:
+    reference_docx: ref.docx
 ---
+#####
+
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -13,9 +20,11 @@ install.packages("Quandl", repos = "https://cran.rstudio.com")
 install.packages("fpp", repos = "https://cran.rstudio.com")
 install.packages("fpp2", repos = "https://cran.rstudio.com")
 install.packages("xlsx", repos = "https://cran.rstudio.com")
-install.packages("fpp", readxl = "https://cran.rstudio.com")
 install.packages("pander", repos = "https://cran.rstudio.com")
-install.packages("dgof",, repos = "https://cran.rstudio.com")
+install.packages("dgof", repos = "https://cran.rstudio.com")
+install.packages("bets", repos = "https://cran.rstudio.com")
+install.packages("FinTS", repos = "https://cran.rstudio.com")
+install.packages("normtest", repos = "https://cran.rstudio.com")
 
 library(Quandl) 
 library(fpp)
@@ -27,6 +36,9 @@ library(pander)
 library(dgof)
 library(tseries)
 library(urca)
+library(BETS)
+library(FinTS)
+library(normtest)
 
 # Carregando os dados
 
@@ -35,14 +47,13 @@ fertcons <- read_excel("Datasets/Demanda.xlsx")
 ```
 
 
-# Comentário Inicial - Alálise Exploratório
+# Comentário Inicial - Alálise Exploratória
 
 
 ## Informações sobre a Dataset
 
 
 ```{r cars}
-# Informações iniciais sobre o Dataset
 
 b1 <- fertcons %>% ggplot(aes(x=fertilizantes)) + 
         geom_histogram(bins=30, fill="blue")+
@@ -97,17 +108,11 @@ class(ts.fertcons)
 frequency(ts.fertcons)
 start(ts.fertcons)
 end(ts.fertcons)
-s1 <- autoplot(ts.fertcons, frequency = 12, start=c(1998,1)) + 
+autoplot(ts.fertcons, frequency = 12, start=c(1998,1)) + 
   ylab("Consumo") +
   scale_x_continuous(breaks = scales::extended_breaks(12))+
   ggtitle("Entrega Mensal de Fertilizantes")
 
-s2 <- autoplot(diff(ts.fertcons), frequency = 12, start=c(1998,1)) + 
-  ylab("Consumo") +
-  scale_x_continuous(breaks = scales::extended_breaks(12))+
-  ggtitle("Entrega Mensal de Fertilizantes com Diff")
-
-grid.arrange(s1,s2,nrow = 2)
 
 d1 <- ts.fertcons%>%
   decompose(type= "additive")%>%
@@ -126,7 +131,7 @@ grid.arrange(d1,d2,ncol = 2)
 
 ### Sazonalidade
 
-Verifica-se que os meses de agosto, setembro e outubro, são os de maior entrega de fertilizantes e os piores meses parecem ser os de março e abril iniciando um novo ciclo de crescimento em maio o que parece adequado aos períodos de safra e entresafra.  
+Verifica-se que os meses de agosto, setembro e outubro, são os de maior entrega de fertilizantes e os piores meses parecem ser os de março e abril iniciando um novo ciclo de crescimento em maio, o que parece adequado aos períodos de safra e entressafra.  
 
 Parece haver um crescimento da entrega, em valores absolutos, em todos os meses ao longo dos anos embora haja vales em alguns anos indicando possíveis crises econômicas como a de 2008.
 
@@ -138,16 +143,13 @@ q1 <- ggseasonplot(ts.fertcons, year.labels=TRUE, year.labels.left=TRUE) +
   ylab("$ million") +
   ggtitle("Seasonal plot: antidiabetic drug sales")
 
-q2 <- ggseasonplot(ts.fertcons, polar = TRUE) +
-  ylab("$ million") +
-  ggtitle("Seasonal plot: antidiabetic drug sales")
-
-q3 <- ggsubseriesplot(ts.fertcons) +
+q2 <- ggsubseriesplot(ts.fertcons) +
   ylab("T 1000") +
   ggtitle("Seasonal subseries plot: Entrega de Fertilizantes")
 
 
-grid.arrange(q1,q2, q3, nrow =3)
+grid.arrange(q1,q2, nrow =2, heights=c(40,40))
+
 
 
 
@@ -155,7 +157,7 @@ grid.arrange(q1,q2, q3, nrow =3)
 
 ## Autocorrelação
 
-No correlograma da série é possível notar a presença da sazonaliade nos picos múltiplos de 12, como as cavidades tentem a ficar dois quartos atrás dos picos os múltiplos de 6 são os mais negativos. O dacaimento muito lento do ACF pode ser sinal de não estacionariedade. Como o decaimento do PACF é menos lento que o do ACF modelos com compomentes autorregressivos tem a possibilidade de se adequar melhor. 
+No correlograma da série é possível notar a presença da sazonalidade nos picos múltiplos de 12, como as cavidades tentem a ficar dois quartos atrás dos picos os múltiplos de 6 são os mais negativos. O decaimento muito lento do ACF pode ser sinal de não estacionariedade. Como o decaimento do PACF é menos lento que o do ACF modelos com componentes autorregressivos tem a possibilidade de se adequar melhor. 
 
 ```{r}
 a1 <- ggAcf(ts.fertcons, lag=100)
@@ -170,7 +172,7 @@ Nos testes formais temos as seguintes conclusões:
 
 * ADF:  H~0~</sub> - Série não estacionária -> Rejeitada
 
-* KPPS: H~0~</sub> - Série estácionária -> Rejeitada
+* KPPS: H~0~</sub> - Série estacionária -> Rejeitada
 
 * PP: H~0~</sub> - Série não estacionária -> Rejeitada
 
@@ -230,14 +232,16 @@ No caso do ETS vamos verificar se ele indica outra possibilidade ou se a indica�
 
 # Aditivo
 
-fit_holt_ad <- hw(train,seasonal = "additive", h=14, level=95)
 
+fit_holt_ad <- hw(train,h=14, seasonal = "additive" ,level=95)
 summary(fit_holt_ad)
+
 
 # Multiplicativo
 
-fit_holt_multi <- hw(train,seasonal = "multiplicative", h=14, level=95)
-summary(fit_holt_multi)
+
+fit_holt_multi <- hw(train,h=14, seasonal = "multiplicative", level=95)
+
 
 
 # Plotando os modelos
@@ -249,7 +253,7 @@ h1 <- autoplot(train, serie="Serie Original") +
 
 
 h2 <- autoplot(train, serie="Serie Original") + 
-  autolayer(fit_holt_multi$fitted, serie = "Modelo HW Aditivo") +
+  autolayer(fit_holt_multi$fitted, serie = "Modelo HW Multiplicativo") +
   autolayer(fit_holt_multi, serie = "Previsão",showgap = F, PI=F) +
   autolayer(test, series= "Base de Teste")
 
@@ -260,18 +264,16 @@ h2 <- autoplot(train, serie="Serie Original") +
 ets_model <- ets(train)
 fit_ets <- forecast(ets_model, h=14)
 
+
 h3 <- autoplot(train, serie="Serie Original") + 
-  autolayer(fit_ets$fitted, serie = "Modelo HW Aditivo") +
+  autolayer(fit_ets$fitted, serie = "Modelo HW ETS") +
   autolayer(fit_ets, serie = "Previsão",showgap = F, PI=F) +
   autolayer(test, series= "Base de Teste")
 
 # Resultado do Modelo ETS
-summary(ets_model)
-
-
 
 grid.arrange(h1,h2,h3, nrow=3)
-
+pander(summary(ets_model))
 
 
 print("Modelo HW - Aditivo")
@@ -284,40 +286,132 @@ print("Modelo ETS")
 pander(accuracy(fit_ets))
 
 
+AIC(fit_holt_ad$model)
+AIC(fit_holt_multi$model)
+AIC(ets_model)
+
+
 
 
 ```
 
 
-A comparação entre os modelos HWA e HWM parece pender para o HWA o modelo ETS, que atinge métricas melhores que os dois outros propõe uma abordagem com erro e sazonalidades aditivos e sem tendencia, cuja equação segue abaixo: 
+A comparação entre os modelos HWA e HWM parece pender para o HWA tanto no que diz respeito aos resultados de acurácia quanto aos resultados do AIC. O modelo ETS, que atinge métricas melhores que os dois outros em todas as métricas, propõe uma abordagem com erro e sazonalidades aditivos e sem tendencia, cuja equação segue abaixo: 
+
+![GitHub Logo](./images/etsana.png)
 
 
 
-## Análise de Resíduos
+## SARIMA
 
-Avaliando os resíduos de cada um dos modelos é possível verificar pelos p-values do  Ljung-Box test que o modelo aditivo apresenta um p-value um pouco maior que 0,05, o ETS(A,N,A) possui um p-value maior que 0,05. Ambos possuem resíduos independentes e identicamente distribuidos. No caso do HW multiplicativo o p-value é muito pequeno permitindo rejeitar a hipótese nula, isto é, os resíduos do modelo apresentam problemas de correlação entre os resíduos. 
+Vamos passar ao teste com o modelo ARIMA com sazonalidade, SARIMA. 
+
+```{r}
+
+autoarima_model <- auto.arima(train, seasonal = TRUE, stepwise=FALSE, approximation = FALSE)
+pander(summary(autoarima_model))
+fit_autoarima_model <- forecast(autoarima_model, h=14)
+
+autoplot(train, series ="Série Original") +
+  autolayer(fit_autoarima_model$fitted, series = "Modelo AUTO.ARIMA")+
+  autolayer(fit_autoarima_model, series = "Previsão", showgap = FALSE) +
+  autolayer(test, series= "Base de Teste")
+
+t_test(autoarima_model)
+
+print("Modelo Auto Arima")
+pander(accuracy(fit_autoarima_model))
+AIC(fit_autoarima_model$model)
+
+
+
+
+```
+
+Na parte não sazonal, o modelo sugere ordem 1 de autorregressividade, 0 de diferenciação e de MA. 
+Na parte sazonal, o modelo sugere ordem 2 de autoregressividade, 1 de diferenciação e 0 de MA com 12 observações anuais. 
+
+
+
+## Análise de Resíduos ( correlaçaõ) 
+
+Avaliando os resíduos de cada um dos modelos é possível verificar pelos p-values do  Ljung-Box test que o modelo aditivo apresenta um p-value um pouco maior que 0,05, o ETS(A,N,A) possui um p-value maior que 0,05. Ambos possuem resíduos independentes e identicamente distribuídos. No caso do HW multiplicativo o p-value é muito pequeno permitindo rejeitar a hipótese nula, isto é, os resíduos do modelo apresentam problemas de correlação entre os resíduos. O modelo sarima possui um p-value maior que 0,05 e que o modelo ETS. Do ponto de vista  dos resíduos o modelo autoarima parece ser o que melhor se adequa. 
 
 
 
 ```{r}
 checkresiduals(fit_holt_ad)
 checkresiduals(fit_holt_multi)
-checkresiduals(ets_model)
+checkresiduals(fit_ets)
+checkresiduals(fit_autoarima_model)
+
+```
+
+## Teste de Heterocedasticidade
+ 
+Apenas o modelo Holt Winters multiplicativo se revela heterocedastico.
+
+
+```{R}
+
+ArchTest(fit_holt_ad$residuals,lags = 12)
+ArchTest(fit_holt_multi$residuals,lags = 12)
+ArchTest(fit_ets$residuals,lags = 12)
+ArchTest(fit_autoarima_model$residuals,lags = 12)
 
 ```
 
 
-## SARIMA
+### Teste de Normalidade
+
+O único modelo que passa nos dois testes de normalidade é o SARIMA. 
+
+```{R}
+
+jb.norm.test(fit_holt_ad$residuals, nrepl = 2000)
+jb.norm.test(fit_holt_multi$residuals,nrepl = 2000)
+jb.norm.test(fit_ets$residuals,nrepl = 2000)
+jb.norm.test(fit_autoarima_model$residuals,nrepl = 2000)
+
+
+shapiro.test(fit_holt_ad$residuals)
+shapiro.test(fit_holt_multi$residuals)
+shapiro.test(fit_ets$residuals)
+shapiro.test(fit_autoarima_model$residuals)
+
+```
+
+
+# Conclusão
+
+Abaixo apresenta-se um resumo dos resultados dos resíduos de cada um dos modelos, é possível verificar que o Holt Winters Multiplicativo não passou em nenhum teste e que os modelos de simplificação exponencial não passaram nos testes de normalidade. O modelo SARIMA passou em todos os testes. 
 
 ```{r}
 
-auto.arima(ts.fertcons)
+comparativo_residuos <- data.frame(modelo=c("Holt_Winters_Aditivo","Holt_Winters_Multiplicativo","ETS","Auto_Arima_Sazonal"))
+comparativo_residuos$LjungBox <- c("S","N","S","S")
+comparativo_residuos$Norm_JB <- c("N","N","N","S")
+comparativo_residuos$Norm_SH <- c("N","N","N","S")
+comparativo_residuos$Homocedasticidade <- c("S","N","S","S")
 
-fit_sarima <- arima(train, order=c(2,0,1), seasonal=c(0,1,0))
-
-
-
-
+pander(comparativo_residuos)
 
 ```
+
+Abaixo apresenta-se um comparativo dos resultados levando em consideração o AIC, que só pode ser comparado entre modelos da mesma categoria,  e o RMSE. Dos modelos por simplificação exponencial o ETS apresentou o menor AIC e o menor RMSE. Comparando o RMSE do ETS com o SARIMA vemos que o SARIMA se adequa melhor
+
+```{r}
+
+comparativo_indices <- data.frame(modelo=c("Holt_Winters_Aditivo","Holt_Winters_Multiplicativo","ETS","Auto_Arima_Sazonal"))
+comparativo_indices$AIC <-  c(AIC(fit_holt_ad$model),AIC(fit_holt_multi$model),AIC(fit_ets$model),AIC(fit_autoarima_model$model))
+
+comparativo_indices$RMSE <- c(data.frame(accuracy(fit_holt_ad))$RMSE,data.frame(accuracy(fit_holt_multi))$RMSE,data.frame(accuracy(fit_ets))$RMSE,data.frame(accuracy(fit_autoarima_model))$RMSE)
+
+pander(comparativo_indices)
+
+```
+
+
+Face ao exposto, conclui-se que o modelo SARIMA parece se adequar melhor na comparação com os outros. 
+
 
