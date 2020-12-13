@@ -7,7 +7,7 @@ e-mail: "cquinta@gmail.com"
 date: "12/12/2020"
 output:
    word_document:
-    reference_docx: ref.docx
+    reference_docx: series-temporais-tf-ref.docx
 ---
 #####
 
@@ -25,6 +25,7 @@ install.packages("dgof", repos = "https://cran.rstudio.com")
 install.packages("bets", repos = "https://cran.rstudio.com")
 install.packages("FinTS", repos = "https://cran.rstudio.com")
 install.packages("normtest", repos = "https://cran.rstudio.com")
+install.packages("dplyr", repos = "https://cran.rstudio.com")
 
 library(Quandl) 
 library(fpp)
@@ -39,6 +40,7 @@ library(urca)
 library(BETS)
 library(FinTS)
 library(normtest)
+library(dplyr)
 
 # Carregando os dados
 
@@ -70,9 +72,9 @@ pander(summary(fertcons))
 
 ```
 
-Pelo gráfico perece que o histograma de frequência e consumo não apresenta uma distribuição normal, pois há um viés a esquerda. O dataset não apresenta "NA" e possui 268 observações. O boxplot destaca um outlier. 
+Pelo gráfico, perece que o histograma de frequência e consumo não apresenta uma distribuição normal, pois há um viés a esquerda. O dataset não apresenta "NA" e possui 268 observações. O boxplot destaca um outlier. 
 
-Realizando os testes de normalidade verificamos que há divergências entre o teste de Shapiro e o Komolgorov, no primeiro os dados não são considerados normais ( P-Value < 0.05) e no segundo são considerados normais (P-Value > 0.05)
+Realizando os testes de normalidade verificamos que há divergências entre o teste de Shapiro e o Komolgorov, no primeiro os dados não são considerados normais (P-Value < 0.05) e no segundo são considerados normais (P-Value > 0.05)
 
 ```{r}
 # Shapiro-Wilk
@@ -88,9 +90,9 @@ ks.test(fertcons$fertilizantes, mean(fertcons$fertilizantes), sd(fertcons$fertil
 
 ## Criando e analisando a série temporal
 
-Foi criada uma série temporal chamada ts.fertcons seu gráfico foi plotado e decomposto.
+Foi criada uma série temporal chamada ts.fertcons e seu gráfico foi plotado e decomposto.
 
-É possível identificar no gráfico uma leve tendência de crescimento pois a série inicia em 1998 com valores em torno de 1.000 e o seu final está em torno de 3.000 indicando que a entrega de fertilizantes tem aumentado ao longo dos anos. 
+É possível identificar no gráfico uma tendência de crescimento pois a série inicia em 1998 com valores em torno de 1.000 e o seu final está em torno de 3.000 indicando que a entrega de fertilizantes tem aumentado ao longo dos anos. 
 Em 2008, provavelmente por conta da crise econômica, observa-se um vale no gráfico que contraria um pouco a tendência. 
 
 É possível verificar a existência de sazonalidade, cuja amplitude vai aumentando, com exceção de 2003,2004, 2008 e 2009, parecendo indicar um padrão multiplicativo. 
@@ -110,6 +112,7 @@ start(ts.fertcons)
 end(ts.fertcons)
 autoplot(ts.fertcons, frequency = 12, start=c(1998,1)) + 
   ylab("Consumo") +
+  geom_smooth()+
   scale_x_continuous(breaks = scales::extended_breaks(12))+
   ggtitle("Entrega Mensal de Fertilizantes")
 
@@ -124,7 +127,7 @@ d2 <- ts.fertcons%>%
   autoplot() + xlab("Ano")+
   ggtitle("Decomposição Multiplicativa")
 
-grid.arrange(d1,d2,ncol = 2)
+grid.arrange(d1,d2,nrow = 2)
 
 ```
 
@@ -157,12 +160,10 @@ grid.arrange(q1,q2, nrow =2, heights=c(40,40))
 
 ## Autocorrelação
 
-No correlograma da série é possível notar a presença da sazonalidade nos picos múltiplos de 12, como as cavidades tentem a ficar dois quartos atrás dos picos os múltiplos de 6 são os mais negativos. O decaimento muito lento do ACF pode ser sinal de não estacionariedade. Como o decaimento do PACF é menos lento que o do ACF modelos com componentes autorregressivos tem a possibilidade de se adequar melhor. 
+No correlograma da série é possível notar a presença da sazonalidade nos picos múltiplos de 12 indicando que a presença de uma diferenciação na parte sazonal pode melhorar a perfornce dos modelos. O decaimento muito lento do ACF pode ser sinal de não estacionariedade. Como o decaimento do PACF é menos lento que o do ACF modelos com componentes autorregressivos tem a possibilidade de se adequar melhor. 
 
 ```{r}
-a1 <- ggAcf(ts.fertcons, lag=100)
-a2 <- ggPacf(ts.fertcons, lag=100)
-grid.arrange(a1,a2,ncol = 2)
+grid.arrange(ggAcf(ts.fertcons,lag=60),ggPacf(ts.fertcons,lag=60),nrow = 2)
 
 ```
 
@@ -184,26 +185,49 @@ A análise gráfica e o teste KPPS indicam que a série não é estacionária, p
 
 
 ```{r}
-adf.test(ts.fertcons)
-kpss.test(ts.fertcons)
-pp.test(ts.fertcons)
+
+
+
+ADF <- adf.test(ts.fertcons)
+
+
+
+KPSS <- kpss.test(ts.fertcons)
+
+PP <- pp.test(ts.fertcons)
+
+avaliacao <- data.frame(Teste=c("ADF", "KPPS","PP"))
+avaliacao$H0 <- c("Nao Estacionaria","Estacionaria","Nao Estacionaria")
+avaliacao$Resultado <- c( (ADF$p.value > 0.05), (KPSS$p.value > 0.05), (PP$p.value > 0.05))
+
+pander(avaliacao, split.table=Inf)
 
 ```
 
-Ao tentar obter convergência nos resultados dos testes através da diferenciação da série observamos que com uma diferenciação é possível manter os resultados do ADF e do PP e inverter o resultado do kpss obtendo indicação de estacionariedade nos 3 testes. 
+Ao tentar obter convergência nos resultados dos testes através da diferenciação da série observamos que com uma diferenciação é possível manter os resultados do ADF e do PP e inverter o resultado do kpss obtendo indicação de estacionariedade nos 3 testes. A presença de 1 spike no primeiro lag indica a possibilidade de que a presença de um grau de média móvel nos modelos possa melhorar sua 
+performance. 
 
 ```{r}
 #Utililzando ndiff para saber o número de diferenciações necessárias
 ndiffs(ts.fertcons)
+nsdiffs(ts.fertcons)
 
 # Diferenciando a série
 ts.diff_fertcons <- diff(ts.fertcons)
 
+grid.arrange(ggAcf(ts.diff_fertcons,lag=60),ggPacf(ts.diff_fertcons,lag=60),nrow = 2)
+
 # Testando
 
-adf.test(ts.diff_fertcons)
-kpss.test(ts.diff_fertcons)
-pp.test(ts.diff_fertcons)
+ADF_Diff <- adf.test(ts.diff_fertcons)
+KPSS_Diff <- kpss.test(ts.diff_fertcons)
+PP_Diff <- pp.test(ts.diff_fertcons)
+
+avaliacao_diff <- data.frame(Teste=c("ADF_DIFF", "KPPS_DIFF","PP_DIFF"))
+avaliacao_diff$H0 <- c("Nao Estacionaria","Estacionaria","Nao Estacionaria")
+avaliacao_diff$Resultado <- c( (ADF_Diff$p.value > 0.05), (KPSS_Diff$p.value > 0.05), (PP_Diff$p.value > 0.05))
+
+pander(avaliacao_diff, split.table=Inf)
 
 ```
 
@@ -220,85 +244,100 @@ test <-window(ts.fertcons, start = c(2019,1),end = c(2020,4))
 
 ## Modelos por Exponential Smoothing
 
-Vamos utilizar 3 modelos e tentar comparar a capacidade de forecasting dos mesmos, a saber: 
+Vamos utilizar 3 modelos e tentar comparar a adequação dos mesmos para o forecasting, a saber: 
 
-* Holt Winters Aditivo
-* Holt Winters Multiplicativo 
-* ETS
+* **Holt Winters Aditivo (HWA)**
+* **Holt Winters Multiplicativo (HWM)**
+* **ETS**
 
-No caso do ETS vamos verificar se ele indica outra possibilidade ou se a indicação bate com HWA ou HWM. 
+No caso do ETS vamos verificar se ele indica outra possibilidade ou se a indicação se adequa ao  HWA ou HWM. 
 
 ```{r}
 
-# Aditivo
+# HW Aditivo
 
-
-fit_holt_ad <- hw(train,h=14, seasonal = "additive" ,level=95)
+fit_holt_ad <- hw(train,h=16, seasonal = "additive" ,level=95)
 summary(fit_holt_ad)
 
 
-# Multiplicativo
+# HW Multiplicativo
 
 
-fit_holt_multi <- hw(train,h=14, seasonal = "multiplicative", level=95)
-
-
-
-# Plotando os modelos
-
-h1 <- autoplot(train, serie="Serie Original") + 
-  autolayer(fit_holt_ad$fitted, serie = "Modelo HW Aditivo") +
-  autolayer(fit_holt_ad, serie = "Previsão",showgap = F, PI=F) +
-  autolayer(test, series= "Base de Teste")
-
-
-h2 <- autoplot(train, serie="Serie Original") + 
-  autolayer(fit_holt_multi$fitted, serie = "Modelo HW Multiplicativo") +
-  autolayer(fit_holt_multi, serie = "Previsão",showgap = F, PI=F) +
-  autolayer(test, series= "Base de Teste")
-
+fit_holt_multi <- hw(train,h=16, seasonal = "multiplicative", level=95)
+summary(fit_holt_multi)
 
 
 # Utilizando modelo ETS ( Error, Trend, Seasonal)
 
 ets_model <- ets(train)
-fit_ets <- forecast(ets_model, h=14)
+summary(ets_model)
+
+# Efetuando o forecast
+
+fit_ets <- forecast(ets_model, h=16)
+summary(fit_ets)
 
 
-h3 <- autoplot(train, serie="Serie Original") + 
+# Plotando os modelos
+
+h1 <- autoplot(train, serie="Serie Original", start=c(2007,1)) + 
+  autolayer(fit_holt_ad$fitted, serie = "Modelo HW Aditivo") +
+  autolayer(fit_holt_ad, serie = "Previsão",showgap = F, PI=F) +
+  autolayer(test, series= "Base de Teste") +
+  scale_x_continuous(breaks = scales::extended_breaks(12))+
+  theme(axis.text.x=element_text(angle=-45,vjust=0.5))+
+  ggtitle("Modelo HW Aditivo")
+
+
+h2 <- autoplot(train, serie="Serie Original", start=c(2007,1)) + 
+  autolayer(fit_holt_multi$fitted, serie = "Modelo HW Multiplicativo") +
+  autolayer(fit_holt_multi, serie = "Previsão",showgap = F, PI=F) +
+  autolayer(test, series= "Base de Teste")+
+  scale_x_continuous(breaks = scales::extended_breaks(12))+
+  theme(axis.text.x=element_text(angle=-45,vjust=0.5))+
+  ggtitle("Modelo HW Multiplicativo")
+
+
+h3 <- autoplot(train, serie="Serie Original",start=c(2007,1)) + 
   autolayer(fit_ets$fitted, serie = "Modelo HW ETS") +
   autolayer(fit_ets, serie = "Previsão",showgap = F, PI=F) +
-  autolayer(test, series= "Base de Teste")
+  autolayer(test, series= "Base de Teste")+
+  scale_x_continuous(breaks = scales::extended_breaks(12))+
+  theme(axis.text.x=element_text(angle=-45,vjust=0.5))+
+  ggtitle("Modelo ETS(A,N,A)")
 
-# Resultado do Modelo ETS
+
+
 
 grid.arrange(h1,h2,h3, nrow=3)
-pander(summary(ets_model))
 
 
-print("Modelo HW - Aditivo")
-pander(accuracy(fit_holt_ad))
+# Resultados dos Modelos
 
-print("Modelo HW - Multiplicativo")
-pander(accuracy(fit_holt_multi))
+# Modelo HW - Aditivo
 
-print("Modelo ETS")
-pander(accuracy(fit_ets))
+pander(accuracy(fit_holt_ad,test), split.table = Inf)
 
+# Modelo HW - Multiplicativo
 
-AIC(fit_holt_ad$model)
-AIC(fit_holt_multi$model)
-AIC(ets_model)
+pander(accuracy(fit_holt_multi,test), split.table = Inf)
 
+# Modelo ETS
 
+pander(accuracy(fit_ets,test), split.table = Inf)
 
+# Comparando os AIC´s
+
+comparativo_SME_aic <- data.frame(Modelo=c("HWA","HWM","TSE"))
+comparativo_SME_aic$AIC <- c(AIC(fit_holt_ad$model),AIC(fit_holt_multi$model),AIC(ets_model))
+pander(comparativo_SME_aic, split.table = Inf)
 
 ```
 
 
 A comparação entre os modelos HWA e HWM parece pender para o HWA tanto no que diz respeito aos resultados de acurácia quanto aos resultados do AIC. O modelo ETS, que atinge métricas melhores que os dois outros em todas as métricas, propõe uma abordagem com erro e sazonalidades aditivos e sem tendencia, cuja equação segue abaixo: 
 
-![GitHub Logo](./images/etsana.png)
+![ETS(A,N,A)](./images/etsana.png)
 
 
 
@@ -309,109 +348,230 @@ Vamos passar ao teste com o modelo ARIMA com sazonalidade, SARIMA.
 ```{r}
 
 autoarima_model <- auto.arima(train, seasonal = TRUE, stepwise=FALSE, approximation = FALSE)
-pander(summary(autoarima_model))
-fit_autoarima_model <- forecast(autoarima_model, h=14)
+summary(autoarima_model)
 
-autoplot(train, series ="Série Original") +
-  autolayer(fit_autoarima_model$fitted, series = "Modelo AUTO.ARIMA")+
-  autolayer(fit_autoarima_model, series = "Previsão", showgap = FALSE) +
-  autolayer(test, series= "Base de Teste")
+# Validando a viabilidade do modelo
 
 t_test(autoarima_model)
 
-print("Modelo Auto Arima")
-pander(accuracy(fit_autoarima_model))
+
+# Efetuando o Forecast
+
+fit_autoarima_model <- forecast(autoarima_model, h=16)
+summary(fit_autoarima_model)
+
+
+# Plotando o modelo
+
+autoplot(train, series ="Série Original",start=c(2007,1)) +
+  autolayer(fit_autoarima_model$fitted, series = "Modelo AUTO.ARIMA")+
+  autolayer(fit_autoarima_model, series = "Previsão", showgap = FALSE) +
+  autolayer(test, series= "Base de Teste")+
+  scale_x_continuous(breaks = scales::extended_breaks(12))+
+  theme(axis.text.x=element_text(angle=-45,vjust=0.5))+
+  ggtitle("Modelo SARIMA")
+
+
+# Resultado do Modelo 
+
+pander(accuracy(fit_autoarima_model,test), split.table = Inf)
+
+# AIC
+
 AIC(fit_autoarima_model$model)
-
-
-
 
 ```
 
-Na parte não sazonal, o modelo sugere ordem 1 de autorregressividade, 0 de diferenciação e de MA. 
-Na parte sazonal, o modelo sugere ordem 2 de autoregressividade, 1 de diferenciação e 0 de MA com 12 observações anuais. 
+
+Na parte não sazonal, o modelo autoarima sugere ordem 1 de autorregressividade, 0 de diferenciação e de MA. 
+Na parte sazonal, o modelo autoarima sugere ordem 2 de autoregressividade, 1 de diferenciação e 0 de MA com 12 observações anuais.
+
+Como mostrado anteriormente, a série apresenta uma tendência que pode ser retirada com uma diferenciação. Como o modelo sugerido não está efetuando esta diferenciação na parte não sazonal, vamos testar um modelo com esta difernciação. Adicionalmente vamos incluir 1 grau de MA na parte não sazonal e verificar como fica o comportamento frente ao modelo sugerido pelo auto.arima. 
 
 
+
+```{R} 
+sarima_model <- Arima(train, order= c(1,1,1), seasonal = list(order=c(2,1,0), period=12))
+summary(sarima_model)
+
+# Testando a viabilidade do modelo 
+
+t_test(sarima_model)
+
+
+
+# Efetuando o Forecast
+
+fit_sarima_model <- forecast(sarima_model, h=16)
+summary(fit_sarima_model)
+
+
+# Plotando o modelo
+
+autoplot(train, series ="Série Original",start=c(2007,1)) +
+  autolayer(fit_sarima_model$fitted, series = "Modelo ARIMA")+
+  autolayer(fit_sarima_model, series = "Previsão", showgap = FALSE) +
+  autolayer(test, series= "Base de Teste")+
+  scale_x_continuous(breaks = scales::extended_breaks(12))+
+  theme(axis.text.x=element_text(angle=-45,vjust=0.5))+
+  ggtitle("Modelo Arima(1,1,1),(2,1,0)")
+
+
+
+# Resultado do Modelo 
+
+pander(accuracy(fit_sarima_model,test), split.table = Inf)
+
+# AIC
+
+AIC(fit_sarima_model$model)
+
+```
 
 ## Análise de Resíduos ( correlaçaõ) 
 
-Avaliando os resíduos de cada um dos modelos é possível verificar pelos p-values do  Ljung-Box test que o modelo aditivo apresenta um p-value um pouco maior que 0,05, o ETS(A,N,A) possui um p-value maior que 0,05. Ambos possuem resíduos independentes e identicamente distribuídos. No caso do HW multiplicativo o p-value é muito pequeno permitindo rejeitar a hipótese nula, isto é, os resíduos do modelo apresentam problemas de correlação entre os resíduos. O modelo sarima possui um p-value maior que 0,05 e que o modelo ETS. Do ponto de vista  dos resíduos o modelo autoarima parece ser o que melhor se adequa. 
-
+Avaliando os resíduos de cada um dos modelos é possível verificar pelo Ljung-Box test, cuja hipótese nula indica resíduos independentes, que os modelos HW aditivo, ETS, Arima((1,0,0),(2,1,0)) e ARIMA((1,1,1),(2,1,0)) apresentam um p-value maior que 0,05 , indicando que todos possuem resíduos independentes e identicamente distribuídos. No caso do HW multiplicativo o p-value é muito pequeno indicando a  rejeição da hipótese nula, isto é, os resíduos do modelo apresentam problemas de correlação entre os resíduos. 
 
 
 ```{r}
-checkresiduals(fit_holt_ad)
-checkresiduals(fit_holt_multi)
-checkresiduals(fit_ets)
-checkresiduals(fit_autoarima_model)
+ 
+FHWA_LBOX <- checkresiduals(fit_holt_ad$model, col="blue")
+FHWM_LBOX <- checkresiduals(fit_holt_multi$model,col = "blue")
+FETS_LBOX <- checkresiduals(fit_ets, col="blue")
+FAUTOARIMA_LBOX <- checkresiduals(autoarima_model,col="blue")
+FSARIMA_LBOX <- checkresiduals(sarima_model)
+
+avaliacao_LBOX <- data.frame(Modelo=c("HWA","HWM","ETS","ARIMA(1,0,0),(2,1,0)","ARIMA(1,1,1),(2,1,0)"))
+avaliacao_LBOX$OK <- c((FHWA_LBOX$p.value > 0.05), (FHWM_LBOX$p.value > 0.05), (FETS_LBOX$p.value > 0.05),(FAUTOARIMA_LBOX$p.value>0.05),(FSARIMA_LBOX$p.value > 0.05))
+
+pander(avaliacao_LBOX, split.table=Inf)
+
 
 ```
-
 ## Teste de Heterocedasticidade
  
-Apenas o modelo Holt Winters multiplicativo se revela heterocedastico.
+Apenas o modelo Holt Winters Multiplicativo rejeita a hipótese nula indicando heterocedasticidade.
 
 
-```{R}
+```{r}
 
-ArchTest(fit_holt_ad$residuals,lags = 12)
-ArchTest(fit_holt_multi$residuals,lags = 12)
-ArchTest(fit_ets$residuals,lags = 12)
-ArchTest(fit_autoarima_model$residuals,lags = 12)
+# Modelo HWA
+FHWA_ARCH <- ArchTest(fit_holt_ad$model$residuals,lags = 16)
+
+#Modelo HWM
+FHWM_ARCH <- ArchTest(fit_holt_multi$model$residuals,lags = 16)
+
+#Modelo ETS(A,N,A)
+FETS_ARCH <- ArchTest(ets_model$residuals,lags = 16)
+
+#Modelo AutoARIMA
+FAUTOARIMA_ARCH <- ArchTest(autoarima_model$residuals,lags = 16)
+
+#Modelo SARIMA
+
+FSARIMA_ARCH <- ArchTest(sarima_model$residuals,lags = 16)
+
+
+avaliacao_ARCH <- data.frame(Modelo=c("HWA","HWM","ETS","ARIMA(1,0,0),(2,1,0)","ARIMA(1,1,1),(2,1,0)"))
+avaliacao_ARCH$OK <- c((FHWA_ARCH$p.value > 0.05), (FHWM_ARCH$p.value > 0.05), (FETS_ARCH$p.value > 0.05),(FAUTOARIMA_ARCH$p.value>0.05),(FSARIMA_ARCH$p.value > 0.05))
+
+pander(avaliacao_ARCH, split.table=Inf)
+
 
 ```
+
 
 
 ### Teste de Normalidade
 
-O único modelo que passa nos dois testes de normalidade é o SARIMA. 
+O único modelo que passa nos dois testes de normalidade é o ARIMA(1,0,0),(2,1,0), sugerido pelo autoarima. 
 
 ```{R}
+# Teste Jarque-Bera
 
-jb.norm.test(fit_holt_ad$residuals, nrepl = 2000)
-jb.norm.test(fit_holt_multi$residuals,nrepl = 2000)
-jb.norm.test(fit_ets$residuals,nrepl = 2000)
-jb.norm.test(fit_autoarima_model$residuals,nrepl = 2000)
+FHWA_JB <- jb.norm.test(fit_holt_ad$model$residuals)
+FHWM_JB <- jb.norm.test(fit_holt_multi$model$residuals)
+FETS_JB <- jb.norm.test(ets_model$residuals)
+FAUTOARIMA_JB <- jb.norm.test(autoarima_model$residuals)
+FSARIMA_JB <- jb.norm.test(sarima_model$residuals)
+
+avaliacao_JB <- data.frame(Modelo=c("HWA","HWM","ETS","ARIMA(1,1,1),(2,1,0)","ARIMA(1,0,0),(2,1,0)"))
+avaliacao_JB$OK <- c((FHWA_JB$p.value > 0.05), (FHWM_JB$p.value > 0.05), (FETS_JB$p.value > 0.05),(FAUTOARIMA_JB$p.value>0.05),(FSARIMA_JB$p.value > 0.05))
+
+pander(avaliacao_JB, split.table=Inf)
 
 
-shapiro.test(fit_holt_ad$residuals)
-shapiro.test(fit_holt_multi$residuals)
-shapiro.test(fit_ets$residuals)
-shapiro.test(fit_autoarima_model$residuals)
+# Teste Shapiro
+
+FHWA_SH <- shapiro.test(fit_holt_ad$model$residuals)
+FHWM_SH <- shapiro.test(fit_holt_multi$model$residuals)
+FETS_SH <- shapiro.test(ets_model$residuals)
+FAUTOARIMA_SH <- shapiro.test(autoarima_model$residuals)
+FSARIMA_SH <- shapiro.test(sarima_model$residuals)
+
+avaliacao_SH <- data.frame(Modelo=c("HWA","HWM","ETS","ARIMA(1,1,1),(2,1,0)","ARIMA(1,1,1),(2,1,0)"))
+avaliacao_SH$OK <- c((FHWA_SH$p.value > 0.05), (FHWM_SH$p.value > 0.05), (FETS_SH$p.value > 0.05),(FAUTOARIMA_SH$p.value>0.05),(FSARIMA_SH$p.value > 0.05))
+
+FSARIMA_SH$p.value
+
+pander(avaliacao_SH, split.table=Inf)
+
+
 
 ```
 
 
 # Conclusão
 
-Abaixo apresenta-se um resumo dos resultados dos resíduos de cada um dos modelos, é possível verificar que o Holt Winters Multiplicativo não passou em nenhum teste e que os modelos de simplificação exponencial não passaram nos testes de normalidade. O modelo SARIMA passou em todos os testes. 
+Abaixo apresenta-se um resumo dos resultados dos resíduos de cada um dos modelos, é possível verificar que o Holt Winters Multiplicativo não passou em nenhum teste e que os modelos de simplificação exponencial não passaram nos testes de normalidade. O modelo SARIMA do auto.arima (1,0,0),(2,1,0) passou em todos os testes e o modelo SARIMA que tentamos (1,1,1),(2,1,0) não passou apenas no teste de normalidade. 
 
 ```{r}
 
-comparativo_residuos <- data.frame(modelo=c("Holt_Winters_Aditivo","Holt_Winters_Multiplicativo","ETS","Auto_Arima_Sazonal"))
-comparativo_residuos$LjungBox <- c("S","N","S","S")
-comparativo_residuos$Norm_JB <- c("N","N","N","S")
-comparativo_residuos$Norm_SH <- c("N","N","N","S")
-comparativo_residuos$Homocedasticidade <- c("S","N","S","S")
+comparativo_residuos <- data.frame(Modelo=c("HWA","HWM","ETS(A,N,A)","Auto_Arima","ARIMA(1,1,1),(2,1,0)"))
+comparativo_residuos$LjungBox <- c("S","N","S","S","S")
+comparativo_residuos$Norm_JB <- c("N","N","N","S","N")
+comparativo_residuos$Norm_SH <- c("N","N","N","S","N")
+comparativo_residuos$Homocedasticidade <- c("S","N","S","S","S")
 
-pander(comparativo_residuos)
+pander(comparativo_residuos, split.table = Inf)
 
 ```
 
-Abaixo apresenta-se um comparativo dos resultados levando em consideração o AIC, que só pode ser comparado entre modelos da mesma categoria,  e o RMSE. Dos modelos por simplificação exponencial o ETS apresentou o menor AIC e o menor RMSE. Comparando o RMSE do ETS com o SARIMA vemos que o SARIMA se adequa melhor
+Abaixo apresenta-se um comparativo dos resultados levando em consideração o AIC, que só pode ser comparado entre modelos da mesma categoria, o ETS (A,N,A) apresentou o menor AIC em comparação com o HWM e o HWA, já o SARIMA(1,1,1),(2,1,0) apresentou o melhor AIC em relação aos modelos SARIMA. Em relação ao RMSE o modelo que apresentou o melhor RMSE no teste foi o SARIMA(1,1,1),(2,1,0) no treinamento ofi o SARIMA(1,0,0),(2,1,0) oferecido pelo auto.arima.  
 
 ```{r}
 
-comparativo_indices <- data.frame(modelo=c("Holt_Winters_Aditivo","Holt_Winters_Multiplicativo","ETS","Auto_Arima_Sazonal"))
-comparativo_indices$AIC <-  c(AIC(fit_holt_ad$model),AIC(fit_holt_multi$model),AIC(fit_ets$model),AIC(fit_autoarima_model$model))
+comparativo_indices <- data.frame(modelo=c("HWA-Treino","HWA-Teste","HWM-Treino","HWM-Test","ETS-Treino","ETS-Test","AUTOARIMA-Treino","AUTOARIMA-Teste","ARIMA(1,1,1),(2,1,0)-Treino","ARIMA(1,1,1),(2,1,0)-Teste"))
+comparativo_indices$AIC <-  c(AIC(fit_holt_ad$model),AIC(fit_holt_ad$model),AIC(fit_holt_multi$model),AIC(fit_holt_multi$model),AIC(fit_ets$model),AIC(fit_ets$model),AIC(fit_autoarima_model$model),AIC(fit_autoarima_model$model),AIC(fit_sarima_model$model),AIC(fit_sarima_model$model))
 
-comparativo_indices$RMSE <- c(data.frame(accuracy(fit_holt_ad))$RMSE,data.frame(accuracy(fit_holt_multi))$RMSE,data.frame(accuracy(fit_ets))$RMSE,data.frame(accuracy(fit_autoarima_model))$RMSE)
+comparativo_indices$RMSE <- c(data.frame(accuracy(fit_holt_ad,test))$RMSE,data.frame(accuracy(fit_holt_multi,test))$RMSE,data.frame(accuracy(fit_ets,test))$RMSE,data.frame(accuracy(fit_autoarima_model,test))$RMSE,data.frame(accuracy(fit_sarima_model,test))$RMSE)
 
-pander(comparativo_indices)
+pander(comparativo_indices, split.table = Inf)
 
 ```
 
 
-Face ao exposto, conclui-se que o modelo SARIMA parece se adequar melhor na comparação com os outros. 
+Se desprezarmos os testes de normalidade, o modelo SARIMA (1,1,1),(2,1,0) seria o mais adequado porém, face ao exposto, concluimos que o modelo SARIMA (1,0,0),(2,1,0), apontado pelo comando auto.ariam, parece se adequar melhor na comparação com os outros por passar nos testes, apresentar bons parâmetros RMSE e AIC se commparado com outros modelos SARIMA.
+
+A seguir uma comparação final do melhor modelo com previsão até dezembro de 2021
+
+```{r}
+
+fit1_autoarima_model <- forecast(autoarima_model, h=36)
+
+pander(accuracy(fit1_autoarima_model,test), split.table = Inf)
+
+autoplot(train, series ="Série Original",start=c(2007,1)) +
+  autolayer(fit1_autoarima_model$fitted, series = "Modelo AUTO.ARIMA")+
+  autolayer(fit1_autoarima_model, series = "Previsão", showgap = FALSE) +
+  autolayer(test, series= "Base de Teste")+
+  scale_x_continuous(breaks = scales::extended_breaks(12))+
+  theme(axis.text.x=element_text(angle=-45,vjust=0.5))+
+  ggtitle("Modelo SARIMA")
+
+
+
+
+```
 
 
